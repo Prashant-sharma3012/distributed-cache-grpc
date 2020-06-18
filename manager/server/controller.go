@@ -1,13 +1,14 @@
 package server
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/distributed-cache-grpc/connector"
 )
 
 var BaseUrl = "http://localhost:"
@@ -41,8 +42,22 @@ func (s *Server) getWorkerAddress() (string, string, int, bool) {
 	return "", (*s.Workers)[pos].Addr, (*s.Workers)[pos].Id, false
 }
 
+func (s *Server) getWorkerConnection(id int) connector.ConnectorServiceClient {
+	var conn connector.ConnectorServiceClient
+	for _, worker := range *s.Workers {
+		if worker.Id == id {
+			conn = worker.Conn
+			break
+		}
+	}
+
+	return conn
+}
+
 func (s *Server) AddToCache(w http.ResponseWriter, r *http.Request) {
 	var req Req
+	var conn connector.ConnectorServiceClient
+
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -57,6 +72,8 @@ func (s *Server) AddToCache(w http.ResponseWriter, r *http.Request) {
 	}
 
 	keyToRemove, port, id, replaceRecord := s.getWorkerAddress()
+	conn = s.getWorkerConnection(id)
+
 	fmt.Println("Using worker" + strconv.Itoa(id) + "Running on port" + port)
 
 	s.CacheIndex[req.Key] = &CacheIndexRecord{
@@ -67,26 +84,35 @@ func (s *Server) AddToCache(w http.ResponseWriter, r *http.Request) {
 		LastUsedOn: time.Now(),
 	}
 
-	workerURL := BaseUrl + port + "/add"
-	if replaceRecord {
-		fmt.Println("Removing Old Key: " + keyToRemove)
-		req.KeyToDelete = keyToRemove
-		workerURL = BaseUrl + port + "/replace"
+	val, _ := json.Marshal(req.Value)
+
+	reqBody := &connector.Request{
+		Key:         req.Key,
+		Value:       string(val),
+		KeyToDelete: req.KeyToDelete,
 	}
 
-	reqBody, _ := json.Marshal(req)
-	resFromWorker, err1 := http.Post(workerURL, "application/json", bytes.NewBuffer(reqBody))
+	var resFromWorker *connector.Response
+	var err1 error
+	if replaceRecord {
+		fmt.Println("Removing Old Key: " + keyToRemove)
+		resFromWorker, err1 = conn.ReplaceInCache(context.Background(), reqBody)
+	} else {
+		resFromWorker, err1 = conn.AddToCache(context.Background(), reqBody)
+	}
+
 	if err1 != nil {
 		http.Error(w, err1.Error(), http.StatusBadRequest)
 		return
 	}
 
-	body, _ := ioutil.ReadAll(resFromWorker.Body)
-	w.Write(body)
+	w.Write([]byte(resFromWorker.Body))
 }
 
 func (s *Server) RemoveFromCache(w http.ResponseWriter, r *http.Request) {
 	var req Req
+	var conn connector.ConnectorServiceClient
+
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -102,22 +128,27 @@ func (s *Server) RemoveFromCache(w http.ResponseWriter, r *http.Request) {
 	// remove fromcache index
 	delete(s.CacheIndex, req.Key)
 
-	port := s.CacheIndex[req.Key].Addr
-	workerURL := BaseUrl + port + "/remove"
+	conn = s.getWorkerConnection(s.CacheIndex[req.Key].WorkerId)
 
-	reqBody, _ := json.Marshal(req)
-	resFromWorker, err1 := http.Post(workerURL, "application/json", bytes.NewBuffer(reqBody))
+	reqBody := &connector.Request{
+		Key:         req.Key,
+		Value:       "",
+		KeyToDelete: req.KeyToDelete,
+	}
+
+	resFromWorker, err1 := conn.RemoveFromCache(context.Background(), reqBody)
 	if err1 != nil {
 		http.Error(w, err1.Error(), http.StatusBadRequest)
 		return
 	}
 
-	body, _ := ioutil.ReadAll(resFromWorker.Body)
-	w.Write(body)
+	w.Write(resFromWorker.Body)
 }
 
 func (s *Server) GetFromCache(w http.ResponseWriter, r *http.Request) {
 	var req Req
+	var conn connector.ConnectorServiceClient
+
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -132,16 +163,18 @@ func (s *Server) GetFromCache(w http.ResponseWriter, r *http.Request) {
 
 	s.CacheIndex[req.Key].LastUsedOn = time.Now()
 
-	port := s.CacheIndex[req.Key].Addr
-	workerURL := BaseUrl + port + "/get"
+	conn = s.getWorkerConnection(s.CacheIndex[req.Key].WorkerId)
+	reqBody := &connector.Request{
+		Key:         req.Key,
+		Value:       "",
+		KeyToDelete: req.KeyToDelete,
+	}
 
-	reqBody, _ := json.Marshal(req)
-	resFromWorker, err1 := http.Post(workerURL, "application/json", bytes.NewBuffer(reqBody))
+	resFromWorker, err1 := conn.GetFromCache(context.Background(), reqBody)
 	if err1 != nil {
 		http.Error(w, err1.Error(), http.StatusBadRequest)
 		return
 	}
 
-	body, _ := ioutil.ReadAll(resFromWorker.Body)
-	w.Write(body)
+	w.Write(resFromWorker.Body)
 }

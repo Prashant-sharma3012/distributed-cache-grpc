@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/distributed-cache-grpc/connector"
 )
 
 type Req struct {
@@ -17,6 +19,7 @@ type Worker struct {
 	Id       int
 	KeyCount int
 	Addr     string
+	Conn     connector.ConnectorServiceClient
 }
 
 type CacheIndexRecord struct {

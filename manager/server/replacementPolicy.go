@@ -1,6 +1,8 @@
 package server
 
-import "time"
+import (
+	"time"
+)
 
 var MAX_CACHE_RECORDS = 12
 

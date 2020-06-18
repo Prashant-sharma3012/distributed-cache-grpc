@@ -2,43 +2,55 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/distributed-cache-grpc/connector"
 )
 
 func (s *Server) AddToCache(ctx context.Context, r *connector.Request) (*connector.Response, error) {
-	// s.Cache[r.Key] = r
+	key := r.GetKey()
+	s.Cache[key] = r
 	return &connector.Response{Body: "Key Added Successfuly"}, nil
 }
 
 func (s *Server) ReplaceInCache(ctx context.Context, req *connector.Request) (*connector.Response, error) {
 	// Remove record from server
-	// if req.KeyToDelete != "" {
-	// 	fmt.Println("Removing Key From cache: " + req.KeyToDelete)
-	// 	delete(s.Cache, req.KeyToDelete)
-	// }
+	keyToDelete := req.GetKeyToDelete()
+	key := req.GetKey()
 
-	// s.Cache[req.Key] = req
+	if keyToDelete != "" {
+		fmt.Println("Removing Key From cache: " + keyToDelete)
+		delete(s.Cache, keyToDelete)
+	}
+
+	s.Cache[key] = req
 	return &connector.Response{Body: "Key Replaced Successfuly"}, nil
 }
 
 func (s *Server) RemoveFromCache(ctx context.Context, req *connector.Request) (*connector.Response, error) {
-	// _, ok := s.Cache[req.Key]
-	// if !ok {
-	// 	return nil, errors.New("Key Not Found")
-	// }
+	key := req.GetKey()
 
-	// delete(s.Cache, req.Key)
+	_, ok := s.Cache[key]
+	if !ok {
+		return nil, errors.New("Key Not Found")
+	}
+
+	delete(s.Cache, key)
 
 	return &connector.Response{Body: "Key Removed Successfuly"}, nil
 }
 
 func (s *Server) GetFromCache(ctx context.Context, req *connector.Request) (*connector.Response, error) {
+	key := req.GetKey()
 
-	// val, ok := s.Cache[req.Key]
-	// if !ok {
-	// 	return nil, errors.New("Key Not Found")
-	// }
+	val, ok := s.Cache[key]
+	if !ok {
+		return nil, errors.New("Key Not Found")
+	}
 
-	return &connector.Response{Body: "Key Found Successfuly"}, nil
+	res, _ := json.Marshal(val)
+
+	return &connector.Response{Body: string(res)}, nil
 }

@@ -5,21 +5,23 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/distributed-cache-grpc/connector"
 	"github.com/distributed-cache-grpc/manager/api"
 	"github.com/distributed-cache-grpc/manager/server"
 	worker "github.com/distributed-cache-grpc/worker"
+	"google.golang.org/grpc"
 )
 
 func StartCacheServer(serverPortPtr int, numOfWorkers int, workerPortStartAtPtr int) {
-	fmt.Println("Starting Manager")
+	log.Println("Starting Manager")
 	serverPortStr := strconv.Itoa(serverPortPtr)
 
 	s := server.InitServer(":" + serverPortStr)
 
-	fmt.Println("Initializing End Points")
+	log.Println("Initializing End Points")
 	api.InitRoutes(s)
 
-	fmt.Println("Start Workers")
+	log.Println("Starting workers")
 	var workers []server.Worker
 
 	for i := 0; i < numOfWorkers; i++ {
@@ -33,6 +35,20 @@ func StartCacheServer(serverPortPtr int, numOfWorkers int, workerPortStartAtPtr 
 		})
 
 		go func() { worker.StartWorker(":"+workerPortStr, i) }()
+	}
+
+	log.Println("Connecting to all workers")
+
+	// Once all workers are started dial into them and makeconnections
+	var conn *grpc.ClientConn
+	var err error
+	for i := 0; i < numOfWorkers; i++ {
+		conn, err = grpc.Dial(":9000", grpc.WithInsecure())
+		if err != nil {
+			log.Println("Error Connecting to worker running on port %s", workers[i].Addr)
+		}
+
+		workers[i].Conn = connector.NewConnectorServiceClient(conn)
 	}
 
 	s.Workers = &workers
