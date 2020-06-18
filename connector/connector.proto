@@ -1,0 +1,22 @@
+syntax = "proto3";
+package connector;
+
+option go_package = "../connector";
+
+message Request {
+  string Key = 1;
+  string Value = 2;
+  string KeyToDelete = 3;
+}
+
+message Response {
+  string Body = 1;
+}
+
+service ConnectorService{
+  rpc AddToCache(Request) returns (Response);
+  rpc RemoveFromCache(Request) returns (Response);
+  rpc GetFromCache(Request) returns (Response);
+  rpc ReplaceInCache(Request) returns (Response);
+}
+
