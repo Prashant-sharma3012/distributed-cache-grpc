@@ -11,8 +11,6 @@ import (
 	"github.com/distributed-cache-grpc/connector"
 )
 
-var BaseUrl = "http://localhost:"
-
 func (s *Server) getWorkerAddress() (string, string, int, bool) {
 	min := 0
 	pos := 0
@@ -125,15 +123,12 @@ func (s *Server) RemoveFromCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// remove fromcache index
-	delete(s.CacheIndex, req.Key)
-
 	conn = s.getWorkerConnection(s.CacheIndex[req.Key].WorkerId)
 
 	reqBody := &connector.Request{
 		Key:         req.Key,
 		Value:       "",
-		KeyToDelete: req.KeyToDelete,
+		KeyToDelete: req.Key,
 	}
 
 	resFromWorker, err1 := conn.RemoveFromCache(context.Background(), reqBody)
@@ -141,6 +136,9 @@ func (s *Server) RemoveFromCache(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err1.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// remove fromcache index
+	delete(s.CacheIndex, req.Key)
 
 	w.Write([]byte(resFromWorker.Body))
 }

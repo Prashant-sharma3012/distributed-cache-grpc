@@ -42,8 +42,10 @@ func StartCacheServer(serverPortPtr int, numOfWorkers int, workerPortStartAtPtr 
 	// Once all workers are started dial into them and makeconnections
 	var conn *grpc.ClientConn
 	var err error
+	var port string
 	for i := 0; i < numOfWorkers; i++ {
-		conn, err = grpc.Dial(":9000", grpc.WithInsecure())
+		port = ":" + workers[i].Addr
+		conn, err = grpc.Dial(port, grpc.WithInsecure())
 		if err != nil {
 			log.Println("Error Connecting to worker running on port %s", workers[i].Addr)
 		}
